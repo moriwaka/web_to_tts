@@ -2,6 +2,8 @@
 
 Web page URL を受け取り、本文を抽出して Codex CLI で読み上げ用日本語原稿に変換し、既定では MP3 まで生成する CLI です。
 
+`voicevox_tts.py` は VOICEVOX エンジンにテキストを渡して、単体で音声合成するための CLI です。`web_to_tts_script.py` からも MP3 生成に使われますが、直接実行して読み上げ確認や個別ファイル生成にも使えます。
+
 ## 使い方
 
 ```bash
@@ -13,6 +15,14 @@ python3 web_to_tts_script.py https://example.com/article
 - `.raw.txt`: 抽出した本文
 - `.script.txt`: Codex 変換後の読み上げ原稿
 - `.mp3`: VOICEVOX で生成した音声
+
+`voicevox_tts.py` 単体の例:
+
+```bash
+python3 voicevox_tts.py "こんにちは"
+echo "こんにちは" | python3 voicevox_tts.py
+python3 voicevox_tts.py --speaker 3 --output out.mp3 "今日は晴れです"
+```
 
 ## オプション
 
