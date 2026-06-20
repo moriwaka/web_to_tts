@@ -121,6 +121,30 @@ class VoiceVoxCliTest(unittest.TestCase):
             args = voicevox_tts.parse_args()
         self.assertEqual(args.speaker, 29)
 
+    def test_resolve_voicevox_launcher_prefers_path_binary(self) -> None:
+        with patch.object(voicevox_tts.shutil, "which", return_value="/usr/bin/voicevox"):
+            self.assertEqual(voicevox_tts.resolve_voicevox_launcher(), ["/usr/bin/voicevox"])
+
+    def test_resolve_voicevox_launcher_falls_back_to_appimage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir)
+            appimage = home / ".voicevox" / "VOICEVOX.AppImage"
+            appimage.parent.mkdir(parents=True)
+            appimage.write_text("")
+
+            with patch.object(voicevox_tts.shutil, "which", return_value=None), patch.object(
+                voicevox_tts.Path, "home", return_value=home
+            ):
+                self.assertEqual(voicevox_tts.resolve_voicevox_launcher(), [str(appimage)])
+
+    def test_ensure_voicevox_running_launches_when_not_running(self) -> None:
+        with patch.object(voicevox_tts, "probe_voicevox_engine", side_effect=[False, True]), patch.object(
+            voicevox_tts, "launch_voicevox_engine"
+        ) as launch_mock, patch.object(voicevox_tts.time, "sleep", return_value=None):
+            voicevox_tts.ensure_voicevox_running("http://127.0.0.1:50021", timeout=1.0)
+
+        self.assertEqual(launch_mock.call_count, 1)
+
     def test_split_text_prefers_punctuation(self) -> None:
         text = "第一文。第二文。第三文。"
         chunks = voicevox_tts.split_text_for_voicevox(text, max_len=6)
@@ -189,6 +213,38 @@ class VoiceVoxCliTest(unittest.TestCase):
             self.assertEqual(fake_urlopen.last_query["speedScale"], 1.4)
             self.assertEqual(fake_urlopen.last_query["speaker"], 2)
             self.assertEqual(fake_urlopen.last_query["text"], "こんにちは")
+
+    def test_main_auto_starts_voicevox_when_not_running(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "out.mp3"
+            args = SimpleNamespace(
+                base_url="http://127.0.0.1:50021",
+                speaker=2,
+                output=output_path,
+                list_speakers=False,
+                speed_scale=None,
+                pitch_scale=None,
+                intonation_scale=None,
+                volume_scale=None,
+                pre_phoneme_length=None,
+                post_phoneme_length=None,
+                timeout=30.0,
+                text=["こんにちは"],
+            )
+
+            with patch.object(voicevox_tts, "parse_args", return_value=args), patch.object(
+                voicevox_tts, "probe_voicevox_engine", side_effect=[False, True]
+            ), patch.object(
+                voicevox_tts, "launch_voicevox_engine"
+            ) as launch_mock, patch.object(
+                voicevox_tts, "urlopen", side_effect=fake_urlopen
+            ), patch.object(
+                voicevox_tts, "convert_wav_to_mp3", side_effect=fake_convert_wav_to_mp3
+            ):
+                self.assertEqual(voicevox_tts.main(), 0)
+
+            self.assertEqual(launch_mock.call_count, 1)
+            self.assertEqual(output_path.read_bytes(), b"ID3FAKE")
 
     def test_no_play_without_output_keeps_temp_file(self) -> None:
         args = SimpleNamespace(

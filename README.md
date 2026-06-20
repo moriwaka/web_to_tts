@@ -38,7 +38,8 @@ python3 voicevox_tts.py --speaker 3 --output out.mp3 "今日は晴れです"
 
 - `codex` CLI が利用可能であること
 - `readability-lxml` が利用可能であること
-- `voicevox_tts.py` の MP3 生成を使う場合は `ffmpeg` と VOICEVOX エンジンが利用可能であること
+- `voicevox_tts.py` の MP3 生成を使う場合は `ffmpeg` が必要で、VOICEVOX は未起動なら自動起動する
+- `voicevox` コマンドが PATH にあればそれを起動し、なければ `~/.voicevox/VOICEVOX.AppImage` を起動する
 
 ## 例
 

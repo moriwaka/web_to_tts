@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -26,6 +27,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_BASE_URL = "http://127.0.0.1:50021"
 DEFAULT_TIMEOUT = 300.0
+VOICEVOX_STARTUP_TIMEOUT = 30.0
 MAX_REQUEST_TEXT_LEN = 2000
 HIRAGANA_START = 0x3040
 HIRAGANA_END = 0x309F
@@ -179,6 +181,55 @@ def normalize_base_url(base_url: str) -> str:
     return base_url.rstrip("/")
 
 
+def probe_voicevox_engine(base_url: str, timeout: float) -> bool:
+    url = urljoin(f"{base_url}/", "speakers")
+    req = Request(url)
+    try:
+        with urlopen(req, timeout=timeout):
+            return True
+    except HTTPError:
+        return True
+    except URLError:
+        return False
+
+
+def resolve_voicevox_launcher() -> list[str]:
+    voicevox = shutil.which("voicevox")
+    if voicevox is not None:
+        return [voicevox]
+
+    appimage = Path.home() / ".voicevox" / "VOICEVOX.AppImage"
+    if appimage.exists():
+        return [str(appimage)]
+
+    raise SystemExit("VOICEVOX is not running and no launcher was found")
+
+
+def launch_voicevox_engine() -> subprocess.Popen[Any]:
+    cmd = resolve_voicevox_launcher()
+    return subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def ensure_voicevox_running(base_url: str, timeout: float) -> None:
+    if probe_voicevox_engine(base_url, timeout):
+        return
+
+    launch_voicevox_engine()
+    deadline = time.monotonic() + min(timeout, VOICEVOX_STARTUP_TIMEOUT)
+    while time.monotonic() < deadline:
+        if probe_voicevox_engine(base_url, timeout):
+            return
+        time.sleep(0.5)
+
+    raise SystemExit("VOICEVOX failed to start")
+
+
 def request_json(
     url: str,
     *,
@@ -310,6 +361,8 @@ def print_speakers(speakers: list[dict[str, Any]]) -> None:
 def main() -> int:
     args = parse_args()
     base_url = normalize_base_url(args.base_url)
+
+    ensure_voicevox_running(base_url, args.timeout)
 
     if args.list_speakers:
         print_speakers(list_speakers(base_url, args.timeout))
