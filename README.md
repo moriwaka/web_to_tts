@@ -17,6 +17,17 @@ python3 web_to_tts_script.py https://example.com/article --voicevox-args --speak
 - `.script.txt`: Codex 変換後の読み上げ原稿
 - `.mp3`: VOICEVOX で生成した音声
 
+`voicevox_tts.py` は、引数か stdin のどちらかでテキストが必要です。TTY から引数なしで起動すると、入力方法を案内して終了します。
+
+主な `voicevox_tts.py` オプション:
+
+- `--base-url URL`: VOICEVOX エンジンの URL を変更する
+- `--speaker ID`: 話者/style を指定する
+- `--output PATH`: MP3 の出力先を指定する
+- `--list-speakers`: 利用可能な話者/style を一覧表示する
+
+`web_to_tts_script.py` から使う場合は `--voicevox-args` の後ろにそのまま渡せます。
+
 `voicevox_tts.py` 単体の例:
 
 ```bash
@@ -26,35 +37,13 @@ python3 voicevox_tts.py --speaker 3 --output out.mp3 "今日は晴れです"
 python3 voicevox_tts.py --pause-mora-scale 0.5 "クロード・コード"
 ```
 
-`voicevox_tts.py` は、引数か stdin のどちらかでテキストが必要です。TTY から引数なしで起動すると、入力方法を案内して終了します。
-
-主な `voicevox_tts.py` オプション:
-
-- `--base-url URL`: VOICEVOX エンジンの URL を変更する
-- `--speaker ID`: 話者/style を指定する
-- `--output PATH`: MP3 の出力先を指定する
-- `--list-speakers`: 利用可能な話者/style を一覧表示する
-- `--speed-scale`: 話速を調整する
-- `--pitch-scale`: ピッチを調整する
-- `--intonation-scale`: 抑揚を調整する
-- `--volume-scale`: 音量を調整する
-- `--pre-phoneme-length`: 発声前の長さを調整する
-- `--post-phoneme-length`: 発声後の長さを調整する
-- `--pause-mora-scale`: 句読点などの間をまとめて伸縮する
-- `--timeout SEC`: VOICEVOX への HTTP タイムアウトを変更する
-
-`web_to_tts_script.py` から使う場合は `--voicevox-args` の後ろにそのまま渡せます。
-
 ## オプション
 
 - `--script-only`: 原稿生成までで止める
 - `--output-dir DIR`: 自動生成ファイルの出力先
-- `--raw-output PATH`: 抽出本文の出力先を明示する
-- `--script-output PATH`: 原稿の出力先を明示する
-- `--tts-output PATH`: MP3 の出力先を明示する
 - `--voicevox-args ...`: `voicevox_tts.py` に渡す追加オプション
 - `--model MODEL`: Codex のモデル指定
-- `--timeout SEC`: fetch と Codex 呼び出しのタイムアウト
+- `--timeout SEC`: fetch と Codex 呼び出しのタイムアウト。既定は 300 秒
 
 ## 前提
 
@@ -86,6 +75,5 @@ python3 voicevox_tts.py --pause-mora-scale 0.5 "クロード・コード"
 ```bash
 python3 web_to_tts_script.py --script-only https://example.com/article
 python3 web_to_tts_script.py --output-dir out https://example.com/article
-python3 web_to_tts_script.py --tts-output out/news.mp3 https://example.com/article
 python3 web_to_tts_script.py https://example.com/article --voicevox-args --speaker 3
 ```
