@@ -90,21 +90,6 @@ def parse_args() -> argparse.Namespace:
         help="Stop after writing the Japanese script; do not synthesize MP3.",
     )
     parser.add_argument(
-        "--raw-output",
-        type=Path,
-        help="Write the extracted source text to this path.",
-    )
-    parser.add_argument(
-        "--script-output",
-        type=Path,
-        help="Write the Japanese script to this path.",
-    )
-    parser.add_argument(
-        "--tts-output",
-        type=Path,
-        help="Write the synthesized MP3 to this path.",
-    )
-    parser.add_argument(
         "--voicevox-args",
         nargs=argparse.REMAINDER,
         default=[],
@@ -398,21 +383,16 @@ def _strip_known_suffixes(name: str) -> str:
 
 
 def _initial_layout(args: argparse.Namespace) -> OutputLayout:
-    base_path = args.script_output or args.tts_output or args.raw_output
-    if base_path is not None:
-        stem = _strip_known_suffixes(base_path.name)
-        parent = base_path.parent
-    else:
-        stem = datetime.now().strftime("%Y%m%d-%H%M%S")
-        parent = args.output_dir
-    raw_path = args.raw_output or (parent / f"{stem}.raw.txt")
-    script_path = args.script_output or (parent / f"{stem}.script.txt")
-    mp3_path = None if args.script_only else (args.tts_output or (parent / f"{stem}.mp3"))
-    needs_title = base_path is None
+    stem = datetime.now().strftime("%Y%m%d-%H%M%S")
+    parent = args.output_dir
+    raw_path = parent / f"{stem}.raw.txt"
+    script_path = parent / f"{stem}.script.txt"
+    mp3_path = None if args.script_only else (parent / f"{stem}.mp3")
+    needs_title = True
     return OutputLayout(raw_path=raw_path, script_path=script_path, mp3_path=mp3_path, needs_title=needs_title)
 
 
-def _final_layout(args: argparse.Namespace, title: str, base_layout: OutputLayout) -> OutputLayout:
+def _final_layout(title: str, base_layout: OutputLayout) -> OutputLayout:
     if not base_layout.needs_title:
         return base_layout
     stamp = base_layout.raw_path.stem
@@ -423,7 +403,7 @@ def _final_layout(args: argparse.Namespace, title: str, base_layout: OutputLayou
     return OutputLayout(
         raw_path=parent / f"{base_name}.raw.txt",
         script_path=parent / f"{base_name}.script.txt",
-        mp3_path=None if args.script_only else (parent / f"{base_name}.mp3"),
+        mp3_path=None if base_layout.mp3_path is None else (parent / f"{base_name}.mp3"),
         needs_title=False,
     )
 
@@ -468,8 +448,6 @@ def synthesize_mp3(
 
 def main() -> int:
     args = parse_args()
-    if args.script_only and args.tts_output is not None:
-        raise SystemExit("--script-only cannot be combined with --tts-output")
 
     url = validate_url(args.url)
     html = fetch_html(url, args.timeout)
@@ -481,7 +459,7 @@ def main() -> int:
     if layout.needs_title:
         _write_text(layout.raw_path, article_text)
         title = generate_title(article_text, args.model, args.timeout)
-        final_layout = _final_layout(args, title, layout)
+        final_layout = _final_layout(title, layout)
         _move_path(layout.raw_path, final_layout.raw_path)
     else:
         title = _strip_known_suffixes(layout.script_path.name)
@@ -495,11 +473,9 @@ def main() -> int:
         synthesize_mp3(script_text, final_layout.mp3_path, args.timeout, args.voicevox_args)
 
     if args.script_only:
-        if args.script_output is None:
-            print(final_layout.script_path)
+        print(final_layout.script_path)
     else:
-        if args.tts_output is None:
-            print(final_layout.mp3_path)
+        print(final_layout.mp3_path)
     return 0
 
 
