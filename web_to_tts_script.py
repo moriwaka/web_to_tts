@@ -245,8 +245,33 @@ def _collect_text_blocks(soup: BeautifulSoup) -> list[str]:
     return blocks
 
 
+def _collect_article_body_candidates(soup: BeautifulSoup) -> list[str]:
+    blocks: list[str] = []
+    seen: set[str] = set()
+    selectors = (
+        "div[itemprop='articleBody']",
+        "article [itemprop='articleBody']",
+        "article .sf-article-body",
+        "main article .sf-article-body",
+        "article",
+    )
+    for selector in selectors:
+        for node in soup.select(selector):
+            text = _node_text(node)
+            if len(text) < 200:
+                continue
+            if text in seen:
+                continue
+            seen.add(text)
+            blocks.append(text)
+    return blocks
+
+
 def _extract_from_structure(html: str) -> str:
     soup = BeautifulSoup(html, "lxml")
+    body_blocks = _collect_article_body_candidates(soup)
+    if body_blocks:
+        return "\n\n".join(body_blocks)
     _prune_boilerplate(soup)
     blocks = _collect_text_blocks(soup)
     if blocks:
@@ -259,14 +284,18 @@ def extract_article_text(html: str) -> str:
     summary = doc.summary()
     text = _node_text(BeautifulSoup(summary, "lxml"))
     structured = _extract_from_structure(html)
+    fallback = _fallback_article_text(html)
     if structured.strip():
         if text.strip() and len(structured) >= len(text):
             return structured
-        if structured.strip():
+        if len(structured) >= len(fallback):
             return structured
+        return fallback if len(fallback) > len(text) else text
     if text.strip():
+        if len(fallback) > len(text):
+            return fallback
         return text
-    return _fallback_article_text(html)
+    return fallback
 
 
 def _escape_prompt_text(text: str) -> str:

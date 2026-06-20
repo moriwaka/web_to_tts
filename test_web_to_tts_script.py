@@ -138,6 +138,54 @@ class WebToTtsScriptTest(unittest.TestCase):
             text = app.extract_article_text(html)
         self.assertEqual(text, "Only body text")
 
+    def test_extract_article_prefers_longer_fallback_when_summary_is_short(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div class="nav">Ignore me</div>
+            <main>
+              <p>First long paragraph.</p>
+              <p>Second long paragraph.</p>
+            </main>
+          </body>
+        </html>
+        """
+
+        with patch.object(
+            app,
+            "_readability_document",
+            return_value=SimpleNamespace(summary=lambda: "<html><body><p>Short summary.</p></body></html>"),
+        ):
+            text = app.extract_article_text(html)
+
+        self.assertIn("First long paragraph.", text)
+        self.assertIn("Second long paragraph.", text)
+        self.assertNotIn("Short summary.", text)
+
+    def test_extract_article_prefers_article_body_container(self) -> None:
+        html = """
+        <html>
+          <body>
+            <article class="sf-article">
+              <div class="sf-article-body" itemprop="articleBody">
+                <p>Intro paragraph.</p>
+                <p>Second paragraph.</p>
+                <h2>SoftBank has moved on to a bigger AI bet</h2>
+                <p>Third paragraph.</p>
+              </div>
+            </article>
+          </body>
+        </html>
+        """
+
+        with patch.object(app, "_readability_document", return_value=SimpleNamespace(summary=lambda: "<p>Short summary.</p>")):
+            text = app.extract_article_text(html)
+
+        self.assertIn("Intro paragraph.", text)
+        self.assertIn("Second paragraph.", text)
+        self.assertIn("Third paragraph.", text)
+        self.assertIn("SoftBank has moved on to a bigger AI bet", text)
+
     def test_extract_article_concatenates_multiple_structured_blocks(self) -> None:
         html = """
         <html>
