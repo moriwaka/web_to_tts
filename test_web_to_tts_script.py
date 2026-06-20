@@ -186,6 +186,38 @@ class WebToTtsScriptTest(unittest.TestCase):
         self.assertIn("Third paragraph.", text)
         self.assertIn("SoftBank has moved on to a bigger AI bet", text)
 
+    def test_extract_article_penalizes_link_heavy_readability_summary(self) -> None:
+        html = """
+        <html>
+          <body>
+            <article>
+              <div class="sf-article-body" itemprop="articleBody">
+                <p>Factory paragraph one.</p>
+                <p>Factory paragraph two.</p>
+                <p>Factory paragraph three.</p>
+              </div>
+            </article>
+          </body>
+        </html>
+        """
+
+        noisy_summary = """
+        <html><body>
+          <p><a href="#">Related</a> <a href="#">Related</a> <a href="#">Related</a>
+          <a href="#">Related</a> <a href="#">Related</a> <a href="#">Related</a>
+          <a href="#">Related</a> <a href="#">Related</a> <a href="#">Related</a>
+          <a href="#">Related</a> <a href="#">Related</a> <a href="#">Related</a></p>
+        </body></html>
+        """
+
+        with patch.object(app, "_readability_document", return_value=SimpleNamespace(summary=lambda: noisy_summary)):
+            text = app.extract_article_text(html)
+
+        self.assertIn("Factory paragraph one.", text)
+        self.assertIn("Factory paragraph two.", text)
+        self.assertIn("Factory paragraph three.", text)
+        self.assertNotIn("Related", text)
+
     def test_extract_article_concatenates_multiple_structured_blocks(self) -> None:
         html = """
         <html>
@@ -274,7 +306,8 @@ class WebToTtsScriptTest(unittest.TestCase):
         def fake_run(cmd, input, text, capture_output, timeout, check):
             captured["cmd"] = cmd
             captured["input"] = input
-            Path(cmd[3]).write_bytes(b"mp3")
+            output_path = Path(cmd[cmd.index("--output") + 1])
+            output_path.write_bytes(b"mp3")
             return SimpleNamespace(returncode=0, stdout="", stderr="")
 
         with tempfile.TemporaryDirectory() as tmpdir:
