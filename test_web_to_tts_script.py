@@ -170,6 +170,24 @@ class WebToTtsScriptTest(unittest.TestCase):
             title = app.generate_title("本文", "gpt-5.4-mini", 1.0)
         self.assertEqual(title, "すごい記事")
 
+    def test_parse_args_collects_voicevox_args(self) -> None:
+        with patch(
+            "sys.argv",
+            [
+                "web_to_tts_script.py",
+                "https://example.com/article",
+                "--voicevox-args",
+                "--speaker",
+                "3",
+                "--pause-mora-scale",
+                "0.5",
+            ],
+        ):
+            args = app.parse_args()
+
+        self.assertEqual(args.url, "https://example.com/article")
+        self.assertEqual(args.voicevox_args, ["--speaker", "3", "--pause-mora-scale", "0.5"])
+
     def test_convert_to_script_mentions_middle_dot_policy(self) -> None:
         captured = {}
 
@@ -214,9 +232,11 @@ class WebToTtsScriptTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = Path(tmpdir) / "out.mp3"
             with patch.object(app.subprocess, "run", side_effect=fake_run):
-                app.synthesize_mp3("原稿", out_path, 1.0)
+                app.synthesize_mp3("原稿", out_path, 1.0, ["--speaker", "3"])
 
         self.assertEqual(captured["cmd"][1].endswith("voicevox_tts.py"), True)
+        self.assertEqual(captured["cmd"][-2:], ["--output", str(out_path)])
+        self.assertIn("--speaker", captured["cmd"])
         self.assertEqual(captured["input"], "原稿")
 
     def test_main_auto_names_and_tts(self) -> None:
@@ -234,7 +254,7 @@ class WebToTtsScriptTest(unittest.TestCase):
             self.assertEqual(article_text, "本文")
             return "読み上げ原稿"
 
-        def fake_synthesize(script_text, output_path, timeout):
+        def fake_synthesize(script_text, output_path, timeout, voicevox_args):
             calls.append((script_text, output_path))
             output_path.write_bytes(b"mp3")
 
@@ -255,6 +275,7 @@ class WebToTtsScriptTest(unittest.TestCase):
                 raw_output=None,
                 script_output=None,
                 tts_output=None,
+                voicevox_args=[],
             )
             buffer = io.StringIO()
             with patch.object(app, "parse_args", return_value=args), patch.object(
@@ -282,7 +303,7 @@ class WebToTtsScriptTest(unittest.TestCase):
     def test_main_script_only_skips_tts(self) -> None:
         calls = []
 
-        def fake_synthesize(script_text, output_path, timeout):
+        def fake_synthesize(script_text, output_path, timeout, voicevox_args):
             calls.append((script_text, output_path))
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -295,6 +316,7 @@ class WebToTtsScriptTest(unittest.TestCase):
                 raw_output=None,
                 script_output=None,
                 tts_output=None,
+                voicevox_args=[],
             )
             with patch.object(app, "parse_args", return_value=args), patch.object(
                 app, "fetch_html", return_value="<html><body><article><p>本文</p></article></body></html>"

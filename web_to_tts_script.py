@@ -104,6 +104,13 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Write the synthesized MP3 to this path.",
     )
+    parser.add_argument(
+        "--voicevox-args",
+        nargs=argparse.REMAINDER,
+        default=[],
+        metavar="ARG",
+        help="Extra arguments forwarded to voicevox_tts.py. Place this option last.",
+    )
     return parser.parse_args()
 
 
@@ -437,9 +444,11 @@ def _move_path(src: Path, dst: Path) -> None:
     src.replace(dst)
 
 
-def synthesize_mp3(script_text: str, output_path: Path, timeout: float) -> None:
+def synthesize_mp3(
+    script_text: str, output_path: Path, timeout: float, voicevox_args: list[str]
+) -> None:
     voicevox = Path(__file__).with_name("voicevox_tts.py")
-    cmd = [sys.executable, str(voicevox), "--output", str(output_path)]
+    cmd = [sys.executable, str(voicevox), *voicevox_args, "--output", str(output_path)]
     try:
         completed = subprocess.run(
             cmd,
@@ -483,7 +492,7 @@ def main() -> int:
     _write_text(final_layout.script_path, script_text)
 
     if final_layout.mp3_path is not None:
-        synthesize_mp3(script_text, final_layout.mp3_path, args.timeout)
+        synthesize_mp3(script_text, final_layout.mp3_path, args.timeout, args.voicevox_args)
 
     if args.script_only:
         if args.script_output is None:
