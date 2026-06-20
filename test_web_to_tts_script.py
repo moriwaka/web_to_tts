@@ -170,6 +170,20 @@ class WebToTtsScriptTest(unittest.TestCase):
             title = app.generate_title("本文", "gpt-5.4-mini", 1.0)
         self.assertEqual(title, "すごい記事")
 
+    def test_convert_to_script_mentions_middle_dot_policy(self) -> None:
+        captured = {}
+
+        def fake_run(prompt, model, timeout):
+            captured["prompt"] = prompt
+            return "読み上げ原稿"
+
+        with patch.object(app, "_run_codex", side_effect=fake_run):
+            result = app.convert_to_script("本文", "gpt-5.4-mini", 1.0)
+
+        self.assertEqual(result, "読み上げ原稿")
+        self.assertIn("固有名詞のカタカナ表記では「・」を使わず", captured["prompt"])
+        self.assertIn("一般的な用途での「・」は必要なら残してよい", captured["prompt"])
+
     def test_run_codex_builds_command_and_reads_output(self) -> None:
         captured = {}
 

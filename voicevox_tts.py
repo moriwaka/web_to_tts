@@ -96,6 +96,11 @@ def parse_args() -> argparse.Namespace:
         help="Override query.postPhonemeLength.",
     )
     parser.add_argument(
+        "--pause-mora-scale",
+        type=float,
+        help="Scale accent phrase pause_mora.vowel_length values.",
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=DEFAULT_TIMEOUT,
@@ -285,7 +290,29 @@ def apply_query_overrides(query: dict[str, Any], args: argparse.Namespace) -> di
     for key, value in overrides.items():
         if value is not None:
             query[key] = value
+    pause_mora_scale = getattr(args, "pause_mora_scale", None)
+    if pause_mora_scale is not None:
+        scale = pause_mora_scale
+        if scale < 0:
+            raise SystemExit("--pause-mora-scale must be non-negative")
+        scale_pause_moras(query, scale)
     return query
+
+
+def scale_pause_moras(query: dict[str, Any], scale: float) -> None:
+    accent_phrases = query.get("accent_phrases")
+    if not isinstance(accent_phrases, list):
+        return
+
+    for accent_phrase in accent_phrases:
+        if not isinstance(accent_phrase, dict):
+            continue
+        pause_mora = accent_phrase.get("pause_mora")
+        if not isinstance(pause_mora, dict):
+            continue
+        vowel_length = pause_mora.get("vowel_length")
+        if isinstance(vowel_length, (int, float)):
+            pause_mora["vowel_length"] = vowel_length * scale
 
 
 def fetch_audio_query(base_url: str, text: str, speaker: int, timeout: float) -> dict[str, Any]:

@@ -22,6 +22,7 @@ python3 web_to_tts_script.py https://example.com/article
 python3 voicevox_tts.py "こんにちは"
 echo "こんにちは" | python3 voicevox_tts.py
 python3 voicevox_tts.py --speaker 3 --output out.mp3 "今日は晴れです"
+python3 voicevox_tts.py --pause-mora-scale 0.5 "クロード・コード"
 ```
 
 `voicevox_tts.py` は、引数か stdin のどちらかでテキストが必要です。TTY から引数なしで起動すると、入力方法を案内して終了します。
@@ -50,6 +51,8 @@ python3 voicevox_tts.py --speaker 3 --output out.mp3 "今日は晴れです"
 
 1. `voicevox` コマンドが PATH にあればそれを起動する
 2. なければ `~/.voicevox/VOICEVOX.AppImage` を起動する
+
+`--pause-mora-scale` を指定すると、`audio_query` の `accent_phrases[*].pause_mora.vowel_length` をまとめて縮めたり伸ばしたりできます。`1.0` が既定値で、`0.5` なら半分、`0` なら間を消す方向になります。
 
 どちらも見つからない場合は、起動元が見つからない旨を表示して終了します。
 

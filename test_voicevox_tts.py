@@ -100,7 +100,11 @@ class VoiceVoxCliTest(unittest.TestCase):
         fake_urlopen.calls = []
 
     def test_apply_query_overrides(self) -> None:
-        query = {"speedScale": 1.0, "pitchScale": 0.0}
+        query = {
+            "speedScale": 1.0,
+            "pitchScale": 0.0,
+            "accent_phrases": [{"pause_mora": {"vowel_length": 0.3}}],
+        }
 
         class Args:
             speed_scale = 1.25
@@ -109,12 +113,29 @@ class VoiceVoxCliTest(unittest.TestCase):
             volume_scale = None
             pre_phoneme_length = 0.2
             post_phoneme_length = None
+            pause_mora_scale = 0.5
 
         updated = voicevox_tts.apply_query_overrides(query, Args())
         self.assertEqual(updated["speedScale"], 1.25)
         self.assertEqual(updated["pitchScale"], 0.0)
         self.assertEqual(updated["intonationScale"], 1.5)
         self.assertEqual(updated["prePhonemeLength"], 0.2)
+        self.assertEqual(updated["accent_phrases"][0]["pause_mora"]["vowel_length"], 0.15)
+
+    def test_scale_pause_moras_scales_pause_lengths(self) -> None:
+        query = {
+            "accent_phrases": [
+                {"pause_mora": {"vowel_length": 0.3}},
+                {"pause_mora": None},
+                {"pause_mora": {"vowel_length": 0.1}},
+            ]
+        }
+
+        voicevox_tts.scale_pause_moras(query, 0.5)
+
+        self.assertEqual(query["accent_phrases"][0]["pause_mora"]["vowel_length"], 0.15)
+        self.assertIsNone(query["accent_phrases"][1]["pause_mora"])
+        self.assertEqual(query["accent_phrases"][2]["pause_mora"]["vowel_length"], 0.05)
 
     def test_default_speaker_is_no7(self) -> None:
         with patch("sys.argv", ["voicevox_tts.py", "hello"]):
@@ -230,6 +251,7 @@ class VoiceVoxCliTest(unittest.TestCase):
                 volume_scale=None,
                 pre_phoneme_length=None,
                 post_phoneme_length=None,
+                pause_mora_scale=0.4,
                 timeout=30.0,
                 text=["こんにちは"],
             )
