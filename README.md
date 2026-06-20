@@ -24,6 +24,8 @@ echo "こんにちは" | python3 voicevox_tts.py
 python3 voicevox_tts.py --speaker 3 --output out.mp3 "今日は晴れです"
 ```
 
+`voicevox_tts.py` は、引数か stdin のどちらかでテキストが必要です。TTY から引数なしで起動すると、入力方法を案内して終了します。
+
 ## オプション
 
 - `--script-only`: 原稿生成までで止める
@@ -38,8 +40,24 @@ python3 voicevox_tts.py --speaker 3 --output out.mp3 "今日は晴れです"
 
 - `codex` CLI が利用可能であること
 - `readability-lxml` が利用可能であること
-- `voicevox_tts.py` の MP3 生成を使う場合は `ffmpeg` が必要で、VOICEVOX は未起動なら自動起動する
-- `voicevox` コマンドが PATH にあればそれを起動し、なければ `~/.voicevox/VOICEVOX.AppImage` を起動する
+- `voicevox_tts.py` の MP3 生成には `ffmpeg` が必要であること
+- VOICEVOX が未起動でも自動起動を試みること
+- `voicevox` コマンドが PATH にあるか、なければ `~/.voicevox/VOICEVOX.AppImage` があること
+
+## VOICEVOX
+
+`voicevox_tts.py` は起動時に VOICEVOX エンジンを確認します。見つからない場合は、次の順で起動を試みます。
+
+1. `voicevox` コマンドが PATH にあればそれを起動する
+2. なければ `~/.voicevox/VOICEVOX.AppImage` を起動する
+
+どちらも見つからない場合は、起動元が見つからない旨を表示して終了します。
+
+## 入力
+
+- 引数で `text` を渡すか、stdin から流し込む必要がある
+- 何も渡さず TTY から起動すると、入力方法を案内して終了する
+- 空白だけの入力は、正規化後に空として扱われる
 
 ## 例
 
