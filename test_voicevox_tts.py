@@ -121,6 +121,15 @@ class VoiceVoxCliTest(unittest.TestCase):
             args = voicevox_tts.parse_args()
         self.assertEqual(args.speaker, 29)
 
+    def test_read_text_requires_input_when_tty(self) -> None:
+        args = SimpleNamespace(text=[],)
+        with patch.object(voicevox_tts.sys.stdin, "isatty", return_value=True):
+            with self.assertRaisesRegex(
+                SystemExit,
+                r"text is required: pass text as arguments or pipe it on stdin",
+            ):
+                voicevox_tts.read_text(args)
+
     def test_resolve_voicevox_launcher_prefers_path_binary(self) -> None:
         with patch.object(voicevox_tts.shutil, "which", return_value="/usr/bin/voicevox"):
             self.assertEqual(voicevox_tts.resolve_voicevox_launcher(), ["/usr/bin/voicevox"])
@@ -136,6 +145,16 @@ class VoiceVoxCliTest(unittest.TestCase):
                 voicevox_tts.Path, "home", return_value=home
             ):
                 self.assertEqual(voicevox_tts.resolve_voicevox_launcher(), [str(appimage)])
+
+    def test_resolve_voicevox_launcher_reports_missing_launcher(self) -> None:
+        with patch.object(voicevox_tts.shutil, "which", return_value=None), patch.object(
+            voicevox_tts.Path, "home", return_value=Path("/nonexistent")
+        ):
+            with self.assertRaisesRegex(
+                SystemExit,
+                r"VOICEVOX is not running, and no launcher was found",
+            ):
+                voicevox_tts.resolve_voicevox_launcher()
 
     def test_ensure_voicevox_running_launches_when_not_running(self) -> None:
         with patch.object(voicevox_tts, "probe_voicevox_engine", side_effect=[False, True]), patch.object(
@@ -183,6 +202,19 @@ class VoiceVoxCliTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertIn("-af", calls[0])
         self.assertIn("pan=stereo|c0=c0|c1=c0", calls[0])
+
+    def test_convert_wav_to_mp3_requires_ffmpeg(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wav_path = Path(tmpdir) / "in.wav"
+            mp3_path = Path(tmpdir) / "out.mp3"
+            wav_path.write_bytes(b"RIFFFAKE")
+
+            with patch.object(voicevox_tts.shutil, "which", return_value=None):
+                with self.assertRaisesRegex(
+                    SystemExit,
+                    r"ffmpeg is required to generate MP3 output",
+                ):
+                    voicevox_tts.convert_wav_to_mp3(wav_path, mp3_path)
 
     def test_end_to_end_synthesis(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

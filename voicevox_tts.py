@@ -108,7 +108,7 @@ def read_text(args: argparse.Namespace) -> str:
     if args.text:
         return " ".join(args.text).strip()
     if sys.stdin.isatty():
-        raise SystemExit("text is required when stdin is a TTY")
+        raise SystemExit("text is required: pass text as arguments or pipe it on stdin")
     return sys.stdin.read().strip()
 
 
@@ -202,7 +202,10 @@ def resolve_voicevox_launcher() -> list[str]:
     if appimage.exists():
         return [str(appimage)]
 
-    raise SystemExit("VOICEVOX is not running and no launcher was found")
+    raise SystemExit(
+        "VOICEVOX is not running, and no launcher was found. "
+        "Put `voicevox` on PATH or install `~/.voicevox/VOICEVOX.AppImage`."
+    )
 
 
 def launch_voicevox_engine() -> subprocess.Popen[Any]:
@@ -227,7 +230,10 @@ def ensure_voicevox_running(base_url: str, timeout: float) -> None:
             return
         time.sleep(0.5)
 
-    raise SystemExit("VOICEVOX failed to start")
+    raise SystemExit(
+        f"VOICEVOX did not start within {min(timeout, VOICEVOX_STARTUP_TIMEOUT):.0f} seconds. "
+        f"Check that the engine is reachable at {base_url}, or start VOICEVOX manually."
+    )
 
 
 def request_json(
@@ -315,7 +321,10 @@ def list_speakers(base_url: str, timeout: float) -> list[dict[str, Any]]:
     url = urljoin(f"{base_url}/", "speakers")
     speakers = request_json(url, timeout=timeout)
     if not isinstance(speakers, list):
-        raise SystemExit("unexpected /speakers response")
+        raise SystemExit(
+            "VOICEVOX /speakers returned unexpected data. "
+            "The engine may be unavailable or incompatible."
+        )
     return speakers
 
 
@@ -327,7 +336,10 @@ def write_output(path: Path, data: bytes) -> None:
 def convert_wav_to_mp3(wav_path: Path, mp3_path: Path) -> None:
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
-        raise SystemExit("ffmpeg is required to generate mp3 output")
+        raise SystemExit(
+            "ffmpeg is required to generate MP3 output. "
+            "Install ffmpeg and ensure it is available on PATH."
+        )
 
     mp3_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -370,11 +382,11 @@ def main() -> int:
 
     text = read_text(args)
     if not text:
-        raise SystemExit("text is empty")
+        raise SystemExit("text is empty: pass non-empty text or pipe non-whitespace input")
 
     chunks = split_text_for_voicevox(text)
     if not chunks:
-        raise SystemExit("text is empty after normalization")
+        raise SystemExit("text is empty after normalization: input contained only whitespace")
 
     audio_chunks: list[bytes] = []
 
