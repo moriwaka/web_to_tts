@@ -62,6 +62,13 @@ class OutputLayout:
     needs_title: bool
 
 
+@dataclass(frozen=True)
+class ArticleCandidate:
+    source: str
+    text: str
+    node: Any | None = None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Fetch a web page, extract the article body, and turn it into a Japanese TTS script."
@@ -197,6 +204,52 @@ def _node_text(node: Any) -> str:
     return _normalize_text(node.get_text("\n", strip=True))
 
 
+def _candidate_text(candidate: ArticleCandidate) -> str:
+    return candidate.text
+
+
+def _paragraph_count(text: str) -> int:
+    return sum(1 for chunk in re.split(r"\n{2,}", text) if chunk.strip())
+
+
+def _link_text_length(node: Any | None) -> int:
+    if node is None or not hasattr(node, "find_all"):
+        return 0
+    total = 0
+    for link in node.find_all("a"):
+        total += len(_normalize_text(link.get_text(" ", strip=True)))
+    return total
+
+
+def _candidate_score(candidate: ArticleCandidate) -> float:
+    text = _candidate_text(candidate)
+    length = len(text)
+    if not length:
+        return float("-inf")
+
+    source_bonus = {
+        "article-body": 700.0,
+        "structured": 280.0,
+        "readability": 80.0,
+        "fallback": 0.0,
+    }.get(candidate.source, 0.0)
+
+    paragraph_bonus = min(_paragraph_count(text) * 120.0, 600.0)
+    link_length = _link_text_length(candidate.node)
+    link_penalty = (link_length / length) * length * 0.9 if length else 0.0
+    short_penalty = max(0, 300 - length) * 2.5
+    boilerplate_penalty = 250.0 if BOILERPLATE_HINTS.search(text) else 0.0
+
+    return float(length) + paragraph_bonus + source_bonus - link_penalty - short_penalty - boilerplate_penalty
+
+
+def _best_candidate(candidates: list[ArticleCandidate]) -> ArticleCandidate:
+    viable = [candidate for candidate in candidates if candidate.text.strip()]
+    if not viable:
+        return ArticleCandidate(source="fallback", text="")
+    return max(viable, key=_candidate_score)
+
+
 def _readability_document(html: str) -> Any:
     try:
         from readability import Document  # type: ignore
@@ -229,8 +282,8 @@ def _fallback_article_text(html: str) -> str:
     return best_text
 
 
-def _collect_text_blocks(soup: BeautifulSoup) -> list[str]:
-    blocks: list[str] = []
+def _collect_text_blocks(soup: BeautifulSoup) -> list[ArticleCandidate]:
+    blocks: list[ArticleCandidate] = []
     seen: set[str] = set()
     for node in soup.select("main .post__content.wysiwyg, main article, main section"):
         text = _node_text(node)
@@ -241,12 +294,12 @@ def _collect_text_blocks(soup: BeautifulSoup) -> list[str]:
         if text in seen:
             continue
         seen.add(text)
-        blocks.append(text)
+        blocks.append(ArticleCandidate(source="structured", text=text, node=node))
     return blocks
 
 
-def _collect_article_body_candidates(soup: BeautifulSoup) -> list[str]:
-    blocks: list[str] = []
+def _collect_article_body_candidates(soup: BeautifulSoup) -> list[ArticleCandidate]:
+    blocks: list[ArticleCandidate] = []
     seen: set[str] = set()
     selectors = (
         "div[itemprop='articleBody']",
@@ -258,44 +311,49 @@ def _collect_article_body_candidates(soup: BeautifulSoup) -> list[str]:
     for selector in selectors:
         for node in soup.select(selector):
             text = _node_text(node)
-            if len(text) < 200:
+            minimum = 200 if selector != "article" else 250
+            if len(text) < minimum:
                 continue
             if text in seen:
                 continue
             seen.add(text)
-            blocks.append(text)
+            source = "article-body" if "articleBody" in selector or "sf-article-body" in selector else "structured"
+            blocks.append(ArticleCandidate(source=source, text=text, node=node))
     return blocks
 
 
 def _extract_from_structure(html: str) -> str:
     soup = BeautifulSoup(html, "lxml")
-    body_blocks = _collect_article_body_candidates(soup)
-    if body_blocks:
-        return "\n\n".join(body_blocks)
+    candidates = _collect_article_body_candidates(soup)
+    if candidates:
+        return _best_candidate(candidates).text
     _prune_boilerplate(soup)
-    blocks = _collect_text_blocks(soup)
-    if blocks:
-        return "\n\n".join(blocks)
+    candidates = _collect_text_blocks(soup)
+    if candidates:
+        return _best_candidate(candidates).text
     return ""
 
 
 def extract_article_text(html: str) -> str:
+    candidates: list[ArticleCandidate] = []
+
     doc = _readability_document(html)
     summary = doc.summary()
-    text = _node_text(BeautifulSoup(summary, "lxml"))
-    structured = _extract_from_structure(html)
-    fallback = _fallback_article_text(html)
-    if structured.strip():
-        if text.strip() and len(structured) >= len(text):
-            return structured
-        if len(structured) >= len(fallback):
-            return structured
-        return fallback if len(fallback) > len(text) else text
-    if text.strip():
-        if len(fallback) > len(text):
-            return fallback
-        return text
-    return fallback
+    summary_soup = BeautifulSoup(summary, "lxml")
+    summary_text = _node_text(summary_soup)
+    if summary_text.strip():
+        candidates.append(ArticleCandidate(source="readability", text=summary_text, node=summary_soup))
+
+    structured_text = _extract_from_structure(html)
+    if structured_text.strip():
+        candidates.append(ArticleCandidate(source="structured", text=structured_text))
+
+    fallback_text = _fallback_article_text(html)
+    if fallback_text.strip():
+        candidates.append(ArticleCandidate(source="fallback", text=fallback_text))
+
+    best = _best_candidate(candidates)
+    return best.text
 
 
 def _escape_prompt_text(text: str) -> str:
