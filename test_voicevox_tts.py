@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import io
 import subprocess
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from types import SimpleNamespace
 from io import StringIO
 from unittest.mock import patch
+import wave
 
 import voicevox_tts
 
@@ -60,7 +62,13 @@ def fake_urlopen(request, timeout=0):
         payload = json.loads(request.data.decode("utf-8"))
         fake_urlopen.last_query = payload
         marker = payload["accent_phrases"][0]["moras"][0]["text"] if payload["accent_phrases"] else "X"
-        return FakeResponse(f"RIFF{marker}WAVE".encode("ascii"), content_type="audio/wav")
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as writer:
+            writer.setnchannels(1)
+            writer.setsampwidth(1)
+            writer.setframerate(8000)
+            writer.writeframes(marker.encode("ascii", "ignore")[:1] or b"X")
+        return FakeResponse(buffer.getvalue(), content_type="audio/wav")
 
     if parsed.path.endswith("/speakers"):
         return FakeResponse(
@@ -237,6 +245,27 @@ class VoiceVoxCliTest(unittest.TestCase):
                 ):
                     voicevox_tts.convert_wav_to_mp3(wav_path, mp3_path)
 
+    def test_connect_waves_concatenates_locally(self) -> None:
+        def make_wav_bytes(frames: bytes) -> bytes:
+            buffer = io.BytesIO()
+            with wave.open(buffer, "wb") as writer:
+                writer.setnchannels(1)
+                writer.setsampwidth(1)
+                writer.setframerate(8000)
+                writer.writeframes(frames)
+            return buffer.getvalue()
+
+        first = make_wav_bytes(b"\x01\x02")
+        second = make_wav_bytes(b"\x03\x04")
+
+        combined = voicevox_tts.connect_waves("http://127.0.0.1:50021", [first, second], timeout=1.0)
+
+        with wave.open(io.BytesIO(combined), "rb") as reader:
+            self.assertEqual(reader.getnchannels(), 1)
+            self.assertEqual(reader.getsampwidth(), 1)
+            self.assertEqual(reader.getframerate(), 8000)
+            self.assertEqual(reader.readframes(reader.getnframes()), b"\x01\x02\x03\x04")
+
     def test_end_to_end_synthesis(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "out.mp3"
@@ -355,7 +384,6 @@ class VoiceVoxCliTest(unittest.TestCase):
             ):
                 self.assertEqual(voicevox_tts.main(), 0)
 
-            self.assertGreaterEqual(len(fake_urlopen.calls), 4)
             audio_query_texts = [
                 parse_qs(urlparse(url).query)["text"][0]
                 for path, _, url in fake_urlopen.calls
@@ -363,9 +391,7 @@ class VoiceVoxCliTest(unittest.TestCase):
             ]
             self.assertGreater(len(audio_query_texts), 1)
             self.assertTrue(all(len(chunk) <= 2000 for chunk in audio_query_texts))
-            self.assertIsNotNone(fake_urlopen.last_connected_waves)
-            combined_input = b"".join(base64.b64decode(w) for w in fake_urlopen.last_connected_waves)
-            self.assertTrue(combined_input.startswith(b"RIFF"))
+            self.assertFalse(any(path.endswith("/connect_waves") for path, _, _ in fake_urlopen.calls))
 
 
 if __name__ == "__main__":

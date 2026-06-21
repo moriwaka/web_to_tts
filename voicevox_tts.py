@@ -10,7 +10,7 @@ Usage examples:
 from __future__ import annotations
 
 import argparse
-import base64
+import io
 import json
 import os
 import shutil
@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import wave
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -339,9 +340,23 @@ def synthesize_audio(
 
 
 def connect_waves(base_url: str, waves: list[bytes], timeout: float) -> bytes:
-    url = urljoin(f"{base_url}/", "connect_waves")
-    payload = [base64.b64encode(wave).decode("ascii") for wave in waves]
-    return request_json(url, method="POST", body=payload, timeout=timeout)
+    if not waves:
+        return b""
+
+    combined = io.BytesIO()
+    with wave.open(io.BytesIO(waves[0]), "rb") as first_wave:
+        params = first_wave.getparams()
+        with wave.open(combined, "wb") as output_wave:
+            output_wave.setparams(params)
+            output_wave.writeframes(first_wave.readframes(first_wave.getnframes()))
+
+            for chunk in waves[1:]:
+                with wave.open(io.BytesIO(chunk), "rb") as input_wave:
+                    if input_wave.getparams() != params:
+                        raise SystemExit("VOICEVOX returned incompatible WAV chunks")
+                    output_wave.writeframes(input_wave.readframes(input_wave.getnframes()))
+
+    return combined.getvalue()
 
 
 def list_speakers(base_url: str, timeout: float) -> list[dict[str, Any]]:

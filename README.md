@@ -39,6 +39,7 @@ python3 web_to_tts_script.py https://example.com/article --voicevox-args --speak
 
 - `codex` CLI が利用可能であること
 - `readability-lxml` が利用可能であること
+- `beautifulsoup4` と `lxml` が利用可能であること
 - `voicevox_tts.py` の MP3 生成には `ffmpeg` が必要であること
 
 ## `voicevox_tts.py`
@@ -54,6 +55,7 @@ python3 voicevox_tts.py --speaker 3 --output out.mp3 "今日は晴れです"
 ```
 
 `voicevox_tts.py` は、引数か stdin のどちらかでテキストが必要です。TTY から引数なしで起動すると、入力方法を案内して終了します。
+`--output` を省略した場合は、一時 MP3 を作成してそのパスを表示します。
 
 ### 入力
 

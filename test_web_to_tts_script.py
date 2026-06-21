@@ -224,11 +224,11 @@ class WebToTtsScriptTest(unittest.TestCase):
           <body>
             <main>
               <div class="post__content wysiwyg p theme__anchors--underline">
-                <p>Opening paragraph.</p>
-                <p>Second opening paragraph.</p>
+                <p>Opening paragraph that is long enough to be selected by the structured extractor.</p>
+                <p>Second opening paragraph that is also long enough to survive the minimum length filter.</p>
               </div>
               <div class="post__content wysiwyg p theme__anchors--underline">
-                <p>Later excerpt paragraph.</p>
+                <p>Later excerpt paragraph that is distinct and should be preserved in order. It also needs enough extra text to clear the selection threshold.</p>
               </div>
             </main>
           </body>
@@ -237,10 +237,38 @@ class WebToTtsScriptTest(unittest.TestCase):
 
         with patch.object(app, "_readability_document", return_value=SimpleNamespace(summary=lambda: "")):
             text = app.extract_article_text(html)
-        self.assertIn("Opening paragraph.", text)
-        self.assertIn("Second opening paragraph.", text)
-        self.assertIn("Later excerpt paragraph.", text)
-        self.assertLess(text.index("Opening paragraph."), text.index("Later excerpt paragraph."))
+        self.assertIn("Opening paragraph that is long enough to be selected by the structured extractor.", text)
+        self.assertIn("Second opening paragraph that is also long enough to survive the minimum length filter.", text)
+        self.assertIn(
+            "Later excerpt paragraph that is distinct and should be preserved in order. It also needs enough extra text to clear the selection threshold.",
+            text,
+        )
+        self.assertLess(
+            text.index("Opening paragraph that is long enough to be selected by the structured extractor."),
+            text.index(
+                "Later excerpt paragraph that is distinct and should be preserved in order. It also needs enough extra text to clear the selection threshold."
+            ),
+        )
+
+    def test_extract_article_prefers_article_over_body_when_body_is_noisy(self) -> None:
+        html = """
+        <html>
+          <body>
+            <article>
+              <p>記事本文。</p>
+            </article>
+            <div class="sidebar">
+              余計な本文ではない長いサイドバーの説明文です。余計な本文ではない長いサイドバーの説明文です。
+              余計な本文ではない長いサイドバーの説明文です。余計な本文ではない長いサイドバーの説明文です。
+            </div>
+          </body>
+        </html>
+        """
+
+        with patch.object(app, "_readability_document", return_value=SimpleNamespace(summary=lambda: "")):
+            text = app.extract_article_text(html)
+
+        self.assertEqual(text, "記事本文。")
 
     def test_generate_title_sanitizes_output(self) -> None:
         def fake_run(prompt, model, timeout):

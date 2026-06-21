@@ -266,19 +266,19 @@ def _fallback_article_text(html: str) -> str:
     candidates.extend(soup.find_all("article"))
     candidates.extend(soup.find_all("main"))
 
-    body = soup.body or soup
-    best_node = body
-    best_text = _node_text(body)
-
+    best_text = ""
     for candidate in candidates:
         candidate_text = _node_text(candidate)
         if len(candidate_text) > len(best_text):
-            best_node = candidate
             best_text = candidate_text
 
-    if best_node is body and not best_text.strip():
-        best_text = _normalize_text(soup.get_text("\n", strip=True))
+    if best_text.strip():
+        return best_text
 
+    body = soup.body or soup
+    best_text = _node_text(body)
+    if not best_text.strip():
+        best_text = _normalize_text(soup.get_text("\n", strip=True))
     return best_text
 
 
@@ -296,6 +296,18 @@ def _collect_text_blocks(soup: BeautifulSoup) -> list[ArticleCandidate]:
         seen.add(text)
         blocks.append(ArticleCandidate(source="structured", text=text, node=node))
     return blocks
+
+
+def _join_candidate_texts(candidates: list[ArticleCandidate]) -> str:
+    parts: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        text = candidate.text.strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        parts.append(text)
+    return "\n\n".join(parts)
 
 
 def _collect_article_body_candidates(soup: BeautifulSoup) -> list[ArticleCandidate]:
@@ -330,6 +342,9 @@ def _extract_from_structure(html: str) -> str:
     _prune_boilerplate(soup)
     candidates = _collect_text_blocks(soup)
     if candidates:
+        combined = _join_candidate_texts(candidates)
+        if combined.strip():
+            return combined
         return _best_candidate(candidates).text
     return ""
 
@@ -443,6 +458,7 @@ def convert_to_script(article_text: str, model: str, timeout: float) -> str:
         f"""
 次の本文を、できるだけ文意を維持したうえで、放送原稿化した日本語原稿に変換してください。
 - 英語は読みカタカナにおきかえる
+- 数値はASCII文字
 - 日本語の普通の文章として出力する
 - 出力は本文のみで、説明やMarkdownは不要
 - ナビゲーションや広告の文言は含めない
